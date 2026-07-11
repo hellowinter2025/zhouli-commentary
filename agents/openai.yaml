@@ -1,0 +1,4 @@
+interface:
+  display_name: "周礼评论与今译"
+  short_description: "结合古籍语义检索，进行今译腔评论与保留原人称的扩写"
+  default_prompt: "使用 $zhouli-commentary，以周礼评论或周礼翻译模式处理我接下来提供的文字。"
