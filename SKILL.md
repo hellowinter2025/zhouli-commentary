@@ -15,6 +15,43 @@ description: >-
 
 最重要的边界：两种模式都必须输出现代白话。“周礼翻译”不是翻译成文言文，而是把现代话扩写成类似文言课本译文的现代话。不得写成“非我不欲助子”“恐言之未明”一类可以直接冒充古文的句子。
 
+
+## 首次环境准备（Agent 必读）
+
+首次在本机使用前，若检索脚本因缺依赖或缺模型失败，先完成下列步骤，不要跳过：
+
+1. 安装 Python 依赖（skill 目录下）：
+
+```powershell
+python -m pip install -U pip
+python -m pip install -r <skill-dir>/requirements.txt
+```
+
+Windows 一键准备（依赖 + 模型预热）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File <skill-dir>/scripts/setup_windows.ps1
+```
+
+2. 嵌入模型 `BAAI/bge-small-zh-v1.5`（约 92 MB）
+   - **主路径**：首次运行 `search_classics.py` 时自动从 Hugging Face 下载并缓存。能访问 GitHub 的环境通常也能访问 Hugging Face。
+   - **备份路径**：若 HF 暂时失败，从 GitHub Release 下载 `bge-small-zh-v1.5.zip`，解压到 `<skill-dir>/models/bge-small-zh-v1.5/`（目录内需有 `config.json`）。
+   - Release 备份地址：`https://github.com/hellowinter2025/zhouli-commentary/releases/latest/download/bge-small-zh-v1.5.zip`
+
+3. 检查环境是否就绪：
+
+```powershell
+python <skill-dir>/scripts/check_setup.py
+```
+
+也可打印完整安装说明：
+
+```powershell
+python <skill-dir>/scripts/search_classics.py --print-setup-hint
+```
+
+模型查找顺序：`--model-path` / `ZHOU_LI_EMBED_MODEL_PATH` → skill 内 `models/bge-small-zh-v1.5` → Hugging Face 本地缓存 → 在线下载。
+
 ## 执行流程
 
 1. 根据用户动词选择模式：要求评论、分析或评价时使用“评论模式”；要求翻译、转换、改写或扩充时使用“翻译模式”。

@@ -14,10 +14,41 @@ import numpy as np
 
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_MODEL_ID = "BAAI/bge-small-zh-v1.5"
 DEFAULT_DB_CANDIDATES = (
     SKILL_DIR / "data" / "poetry_embeddings.sqlite",
     SKILL_DIR.parent / "data" / "rag" / "poetry_embeddings.sqlite",
 )
+DEFAULT_LOCAL_MODEL_CANDIDATES = (
+    SKILL_DIR / "models" / "bge-small-zh-v1.5",
+    SKILL_DIR / "models" / "BAAI" / "bge-small-zh-v1.5",
+)
+RELEASE_MODEL_URL = (
+    "https://github.com/hellowinter2025/zhouli-commentary/releases/latest/download/"
+    "bge-small-zh-v1.5.zip"
+)
+HF_MODEL_PAGE = "https://huggingface.co/BAAI/bge-small-zh-v1.5"
+SETUP_HINT = f"""首次使用请先完成依赖与模型准备：
+
+1) 安装 Python 依赖（推荐在 skill 目录下执行）：
+   python -m pip install -U pip
+   python -m pip install -r "{SKILL_DIR / 'requirements.txt'}"
+
+   Windows 也可运行：
+   powershell -ExecutionPolicy Bypass -File "{SKILL_DIR / 'scripts' / 'setup_windows.ps1'}"
+
+2) 准备嵌入模型 {DEFAULT_MODEL_ID}（约 92 MB）
+   主路径：首次运行本脚本时自动从 Hugging Face 下载并缓存
+   备份路径：从 GitHub Release 下载并解压到 skill 的 models 目录
+     {RELEASE_MODEL_URL}
+     解压后应存在：
+     {SKILL_DIR / 'models' / 'bge-small-zh-v1.5' / 'config.json'}
+
+3) 检查环境：
+   python "{SKILL_DIR / 'scripts' / 'check_setup.py'}"
+
+模型页：{HF_MODEL_PAGE}
+"""
 
 
 def configure_stdio() -> None:
@@ -25,6 +56,10 @@ def configure_stdio() -> None:
         sys.stdout.reconfigure(encoding="utf-8")
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8")
+
+
+def is_local_model_dir(path: Path) -> bool:
+    return path.is_dir() and (path / "config.json").is_file()
 
 
 def find_database(explicit: str | None) -> Path:
@@ -42,35 +77,125 @@ def find_database(explicit: str | None) -> Path:
             return resolved
 
     searched = "\n".join(f"  - {item.resolve()}" for item in candidates)
-    raise SystemExit(f"找不到向量数据库，已检查：\n{searched}")
+    raise SystemExit(f"找不到向量数据库，已检查：\n{searched}\n\n{SETUP_HINT}")
+
+
+def resolve_model_source(explicit_model: str | None, explicit_path: str | None) -> str:
+    """Return a transformers-compatible model id or local directory path."""
+    if explicit_path:
+        path = Path(explicit_path).expanduser().resolve()
+        if not is_local_model_dir(path):
+            raise SystemExit(
+                f"--model-path 不是有效的本地模型目录（需要 config.json）：{path}\n\n{SETUP_HINT}"
+            )
+        return str(path)
+
+    env_path = os.environ.get("ZHOU_LI_EMBED_MODEL_PATH")
+    if env_path:
+        path = Path(env_path).expanduser().resolve()
+        if is_local_model_dir(path):
+            return str(path)
+        raise SystemExit(
+            f"环境变量 ZHOU_LI_EMBED_MODEL_PATH 无效（需要含 config.json 的目录）：{path}\n\n{SETUP_HINT}"
+        )
+
+    for candidate in DEFAULT_LOCAL_MODEL_CANDIDATES:
+        if is_local_model_dir(candidate):
+            return str(candidate.resolve())
+
+    if explicit_model:
+        path = Path(explicit_model).expanduser()
+        if is_local_model_dir(path):
+            return str(path.resolve())
+        return explicit_model
+
+    env_model = os.environ.get("ZHOU_LI_EMBED_MODEL")
+    if env_model:
+        path = Path(env_model).expanduser()
+        if is_local_model_dir(path):
+            return str(path.resolve())
+        return env_model
+
+    return DEFAULT_MODEL_ID
 
 
 def to_simplified(text: str) -> str:
     try:
         from opencc import OpenCC
     except ImportError as exc:
-        raise SystemExit("缺少 opencc-python-reimplemented，请安装 requirements.txt") from exc
+        raise SystemExit(
+            "缺少 opencc-python-reimplemented。\n"
+            f'请执行：python -m pip install -r "{SKILL_DIR / "requirements.txt"}"\n\n'
+            f"{SETUP_HINT}"
+        ) from exc
     return OpenCC("t2s").convert(text)
 
 
 class Embedder:
-    def __init__(self, model_name: str, batch_size: int = 16):
+    def __init__(self, model_source: str, batch_size: int = 16):
         os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
         try:
             import torch
             from transformers import AutoModel, AutoTokenizer
         except ImportError as exc:
-            raise SystemExit("缺少 torch 或 transformers，请安装 requirements.txt") from exc
+            raise SystemExit(
+                "缺少 torch 或 transformers。\n"
+                f'请执行：python -m pip install -r "{SKILL_DIR / "requirements.txt"}"\n\n'
+                f"{SETUP_HINT}"
+            ) from exc
 
         self.torch = torch
         self.batch_size = batch_size
-        try:
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=True)
-            self.model = AutoModel.from_pretrained(model_name, local_files_only=True)
-        except OSError:
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-            self.model = AutoModel.from_pretrained(model_name)
+        self.model_source = model_source
+        self.tokenizer, self.model = self._load_model(AutoTokenizer, AutoModel, model_source)
         self.model.eval()
+
+    @staticmethod
+    def _load_model(auto_tokenizer, auto_model, model_source: str):
+        local_dir = Path(model_source)
+        if local_dir.is_dir():
+            try:
+                tokenizer = auto_tokenizer.from_pretrained(str(local_dir), local_files_only=True)
+                model = auto_model.from_pretrained(str(local_dir), local_files_only=True)
+                return tokenizer, model
+            except OSError as exc:
+                raise SystemExit(
+                    f"本地模型目录无法加载：{local_dir}\n"
+                    "请确认已完整解压 Release 中的 bge-small-zh-v1.5.zip。\n\n"
+                    f"{SETUP_HINT}"
+                ) from exc
+
+        # Hugging Face model id: prefer local hub cache, then online download.
+        try:
+            tokenizer = auto_tokenizer.from_pretrained(model_source, local_files_only=True)
+            model = auto_model.from_pretrained(model_source, local_files_only=True)
+            return tokenizer, model
+        except OSError:
+            pass
+
+        print(
+            f"本地未找到模型缓存，开始从 Hugging Face 下载：{model_source}",
+            file=sys.stderr,
+        )
+        print(
+            "若下载失败，可改用 GitHub Release 备份："
+            f"{RELEASE_MODEL_URL}",
+            file=sys.stderr,
+        )
+        try:
+            tokenizer = auto_tokenizer.from_pretrained(model_source)
+            model = auto_model.from_pretrained(model_source)
+            return tokenizer, model
+        except Exception as exc:  # noqa: BLE001 - surface actionable setup help
+            raise SystemExit(
+                f"无法加载嵌入模型：{model_source}\n"
+                f"原因：{exc}\n\n"
+                "可访问 GitHub 的机器通常也能访问 Hugging Face；"
+                "若暂时失败，请使用 Release 备份模型包：\n"
+                f"  {RELEASE_MODEL_URL}\n"
+                f"解压到：{SKILL_DIR / 'models' / 'bge-small-zh-v1.5'}\n\n"
+                f"{SETUP_HINT}"
+            ) from exc
 
     def encode(self, texts: list[str]) -> np.ndarray:
         vectors: list[np.ndarray] = []
@@ -204,27 +329,44 @@ def search(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--query", action="append", required=True, help="可重复使用，以便一次检索多个语义角度")
+    parser.add_argument("--query", action="append", help="可重复使用，以便一次检索多个语义角度")
     parser.add_argument("--db", help="SQLite 数据库路径；默认自动查找或读取 ZHOU_LI_RAG_DB")
-    parser.add_argument("--model", help="覆盖数据库记录的模型名称，通常不应设置")
+    parser.add_argument(
+        "--model",
+        help="覆盖数据库记录的模型名称或本地模型目录；通常只需使用本地 models/ 或 Hugging Face 默认值",
+    )
+    parser.add_argument(
+        "--model-path",
+        help="本地模型目录（含 config.json）；优先于 --model 与环境变量中的模型名",
+    )
     parser.add_argument("--top-k", type=int, default=12)
     parser.add_argument("--max-per-work", type=int, default=4)
     parser.add_argument("--min-score", type=float, default=-1.0)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--json", action="store_true", help="输出 UTF-8 JSON")
+    parser.add_argument(
+        "--print-setup-hint",
+        action="store_true",
+        help="打印首次安装依赖与模型的说明后退出",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     configure_stdio()
     args = parse_args()
+    if args.print_setup_hint:
+        print(SETUP_HINT)
+        return
+    if not args.query:
+        raise SystemExit("请至少提供一个 --query；查看安装说明可用 --print-setup-hint")
     if args.top_k < 1 or args.max_per_work < 1:
         raise SystemExit("--top-k 和 --max-per-work 必须大于 0")
 
     db_path = find_database(args.db)
     db_model, records, matrix = load_database(db_path)
-    model_name = args.model or db_model
-    embedder = Embedder(model_name, batch_size=args.batch_size)
+    model_source = resolve_model_source(args.model or db_model, args.model_path)
+    embedder = Embedder(model_source, batch_size=args.batch_size)
     results = search(
         queries=args.query,
         records=records,
@@ -238,7 +380,7 @@ def main() -> None:
     if args.json:
         payload = {
             "queries": args.query,
-            "model": model_name,
+            "model": model_source,
             "database": str(db_path),
             "results": results,
         }

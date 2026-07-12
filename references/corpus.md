@@ -55,3 +55,28 @@ Skill 名中的“周礼”仍可作风格代称，但语料现已**真实收录
 4. 开发目录根级的 `data/rag/poetry_embeddings.sqlite`。
 
 因此公开仓库可以直接捆带数据库，也可以只发布脚本，由使用者通过环境变量连接自己的兼容数据库。
+
+## 模型获取
+
+嵌入模型为 `BAAI/bge-small-zh-v1.5`（约 92 MB），**不在 Git 仓库中**（避免接近 GitHub 100MB 单文件限制，也避免仓库膨胀）。
+
+查找顺序（`scripts/search_classics.py`）：
+
+1. 命令行 `--model-path`
+2. 环境变量 `ZHOU_LI_EMBED_MODEL_PATH`
+3. Skill 内 `models/bge-small-zh-v1.5` 或 `models/BAAI/bge-small-zh-v1.5`
+4. 命令行 `--model` / 环境变量 `ZHOU_LI_EMBED_MODEL` / 数据库 `meta.model`
+5. Hugging Face 本地缓存（`local_files_only`）
+6. 从 Hugging Face 在线下载（主路径）
+
+备份：GitHub Release 附件 `bge-small-zh-v1.5.zip`  
+`https://github.com/hellowinter2025/zhouli-commentary/releases/latest/download/bge-small-zh-v1.5.zip`
+
+维护者打包本地 HF 缓存为 Release 附件：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/package_model_release.ps1
+```
+
+生成文件默认位于 `dist/bge-small-zh-v1.5.zip`。
+
