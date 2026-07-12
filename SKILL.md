@@ -1,14 +1,19 @@
 ---
 name: zhouli-commentary
 description: >-
-  Use semantic retrieval over a bundled Simplified Chinese corpus of the Four Books and Five Classics, Analects, and Book of Songs to produce two kinds of Chinese writing: (1) 古文今译腔评论 that explains and comments on modern events while naturally quoting relevant authentic classical lines, and (2) 周礼翻译 that rewrites and expands the user's words in the same textbook-translation tone while preserving the original person, viewpoint, facts, and intent. Use when the user asks for 周礼评论、古文今译腔评论、古书译文腔、周礼翻译、今译式扩写，or asks to combine modern commentary or rewriting with suitable ancient Chinese quotations.
+  Use semantic retrieval over a bundled Simplified Chinese corpus of the Four Books and Five Classics, Analects, Book of Songs, and Zhouli (Zhou Rites) to produce two kinds of Chinese writing: (1) 古文今译腔评论 that explains and comments on modern events while naturally quoting relevant authentic classical lines, and (2) 周礼翻译 that rewrites and expands the user's words in the same textbook-translation tone while preserving the original person, viewpoint, facts, and intent. Use when the user asks for 周礼评论、古文今译腔评论、古书译文腔、周礼翻译、今译式扩写，or asks to combine modern commentary or rewriting with suitable ancient Chinese quotations.
 ---
 
 # 周礼评论与今译
 
-把“周礼”视为此 Skill 的风格代称，不要把检索范围误解为只有《周礼》。实际语料为随 Skill 提供的《大学》《中庸》《孟子》《论语》《诗经》，均已转换为简体并按句切分。
+对内置的简体中文古汉语语料做语义检索，生成两种风格的中文写作：
 
-最重要的边界：两种模式都必须输出现代白话。“周礼翻译”不是翻译成文言文，而是把现代话扩写成类似文言文课文译文的现代话。不得写成“非我不愿助子”“惟恐言之未明”一类可以直接冒充古文的句子。
+1. **评议模式**：用文言课本译笔口吻评议现代事件，并自然援引检索到的真实经句。
+2. **翻译模式**：把用户的话扩写为接近文言课本译文的现代白话，保留原人称、立场、事实与意图。
+
+语料现含《大学》《中庸》《孟子》《论语》《诗经》与《周礼》原文（简体、按句切分）。“周礼”既是风格代称，也对应真实收录的《周礼》正文；不要把检索范围误说成只有风格、没有《周礼》，也不要声称收录了未入库的其他经籍。
+
+最重要的边界：两种模式都必须输出现代白话。“周礼翻译”不是翻译成文言文，而是把现代话扩写成类似文言课本译文的现代话。不得写成“非我不欲助子”“恐言之未明”一类可以直接冒充古文的句子。
 
 ## 执行流程
 
